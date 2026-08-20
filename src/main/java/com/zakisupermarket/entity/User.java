@@ -1,5 +1,6 @@
 package com.zakisupermarket.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -22,6 +23,7 @@ public class User implements UserDetails {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "store_id", nullable = false)
+    @JsonIgnoreProperties({"products", "users", "payments"})
     private Store store;
 
     // Globally unique on purpose: login (UserRepository.findByUsername) has no store

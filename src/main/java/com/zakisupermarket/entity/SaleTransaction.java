@@ -1,5 +1,6 @@
 package com.zakisupermarket.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.zakisupermarket.entity.enums.PaymentMethod;
 import jakarta.persistence.*;
 import lombok.*;
@@ -32,6 +33,7 @@ public class SaleTransaction {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "store_id", nullable = false)
+    @JsonIgnoreProperties({"products", "users", "payments"})
     private Store store;
 
     @ManyToOne(fetch = FetchType.LAZY)

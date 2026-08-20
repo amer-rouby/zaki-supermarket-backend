@@ -1,5 +1,6 @@
 package com.zakisupermarket.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -44,6 +45,7 @@ public class Supplier {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "store_id", nullable = false)
+    @JsonIgnoreProperties({"products", "users", "payments"})
     private Store store;
 
     @CreationTimestamp @Column(name = "created_at", updatable = false)
