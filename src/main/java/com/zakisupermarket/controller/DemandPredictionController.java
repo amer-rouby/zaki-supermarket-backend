@@ -4,7 +4,9 @@ import com.zakisupermarket.dto.request.UpdatePredictionDTO;
 import com.zakisupermarket.dto.response.ApiResponse;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
 import com.zakisupermarket.dto.response.PurchaseOrderSummaryDTO;
+import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
+import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.service.DemandPredictionService;
 import com.zakisupermarket.util.SecurityUtils;
 import jakarta.servlet.http.HttpServletRequest;
@@ -232,6 +234,24 @@ public class DemandPredictionController {
             log.error("Error generating share link", e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to generate share link: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/sales-history")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<SalesHistoryPointDTO>>> getProductSalesHistory(
+            @RequestParam Long productId,
+            @RequestParam(defaultValue = "30") int days) {
+        Long storeId = SecurityUtils.getCurrentStoreId();
+        try {
+            List<SalesHistoryPointDTO> history = predictionService.getProductSalesHistory(productId, storeId, days);
+            return ResponseEntity.ok(ApiResponse.success(history));
+        } catch (FeatureDisabledException e) {
+            return ResponseEntity.status(403).body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error getting product sales history", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Failed to get sales history: " + e.getMessage()));
         }
     }
 

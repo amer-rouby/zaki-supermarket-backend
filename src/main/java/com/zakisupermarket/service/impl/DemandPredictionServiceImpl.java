@@ -4,7 +4,9 @@ import com.zakisupermarket.dto.request.UpdatePredictionDTO;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
 import com.zakisupermarket.dto.response.PurchaseOrderSummaryDTO;
 import com.zakisupermarket.dto.request.CreateShareLinkRequest;
+import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
+import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.entity.DemandPrediction;
 import com.zakisupermarket.entity.Store;
 import com.zakisupermarket.entity.Product;
@@ -15,6 +17,7 @@ import com.zakisupermarket.repository.ProductRepository;
 import com.zakisupermarket.repository.SaleItemRepository;
 import com.zakisupermarket.service.DemandPredictionService;
 import com.zakisupermarket.service.ShareLinkService;
+import com.zakisupermarket.service.settings.ZakiFeatureSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -41,6 +44,7 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     private final StoreRepository storeRepository;
     private final SaleItemRepository saleItemRepository;
     private final ShareLinkService shareLinkService;
+    private final ZakiFeatureSettingsService zakiFeatureSettingsService;
 
     private static final int MOVING_AVG_DAYS = 14;
     private static final int DEFAULT_PREDICTION = 10;
@@ -147,7 +151,7 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
         }
         DemandPrediction saved = predictionRepository.save(prediction);
         log.info("Prediction saved: product={}, date={}, predicted={}", productId, forDate, predictedQuantity);
-        return DemandPredictionResponse.fromEntity(saved, currentStock);
+        return DemandPredictionResponse.fromEntity(saved, currentStock, isStockPredictionEnabled(storeId));
     }
 
     @Override
@@ -158,10 +162,11 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
         List<DemandPrediction> predictions = predictionRepository
                 .findUpcomingPredictions(storeId, today, endDate);
         log.info("Found {} upcoming predictions for store {}", predictions.size(), storeId);
+        boolean riskEnabled = isStockPredictionEnabled(storeId);
         return predictions.stream()
                 .map(p -> {
                     Long prodId = p.getProduct() != null ? p.getProduct().getId() : null;
-                    return DemandPredictionResponse.fromEntity(p, getCurrentStock(prodId));
+                    return DemandPredictionResponse.fromEntity(p, getCurrentStock(prodId), riskEnabled);
                 })
                 .collect(Collectors.toList());
     }
@@ -170,12 +175,13 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     @Transactional(readOnly = true)
     public Page<DemandPredictionResponse> getPredictions(Long storeId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
+        boolean riskEnabled = isStockPredictionEnabled(storeId);
         return predictionRepository
                 .findByStoreIdAndPredictionDateGreaterThanEqualOrderByPredictionDateAsc(
                         storeId, LocalDate.now(), pageable)
                 .map(p -> {
                     Long prodId = p.getProduct() != null ? p.getProduct().getId() : null;
-                    return DemandPredictionResponse.fromEntity(p, getCurrentStock(prodId));
+                    return DemandPredictionResponse.fromEntity(p, getCurrentStock(prodId), riskEnabled);
                 });
     }
 
@@ -188,7 +194,7 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
             throw new RuntimeException("Access denied: Prediction does not belong to this store");
         }
         Long prodId = prediction.getProduct() != null ? prediction.getProduct().getId() : null;
-        return DemandPredictionResponse.fromEntity(prediction, getCurrentStock(prodId));
+        return DemandPredictionResponse.fromEntity(prediction, getCurrentStock(prodId), isStockPredictionEnabled(storeId));
     }
 
     @Override
@@ -372,6 +378,48 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
                 .message("Purchase order created from prediction")
                 .build();
     }
+    @Override
+    @Transactional(readOnly = true)
+    public List<SalesHistoryPointDTO> getProductSalesHistory(Long productId, Long storeId, int days) {
+        if (!isStockPredictionEnabled(storeId)) {
+            throw new FeatureDisabledException("Stock prediction feature is disabled for this store");
+        }
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(days - 1);
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
+        List<SaleItem> saleItems = saleItemRepository.findByProductIdAndStoreIdAndDateBetween(
+                productId, storeId, startDateTime, endDateTime);
+
+        Map<LocalDate, Integer> dailyQuantity = new HashMap<>();
+        Map<LocalDate, BigDecimal> dailySales = new HashMap<>();
+        if (saleItems != null) {
+            for (SaleItem item : saleItems) {
+                if (item.getTransaction() == null || item.getTransaction().getTransactionDate() == null) continue;
+                LocalDate date = item.getTransaction().getTransactionDate().toLocalDate();
+                int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+                BigDecimal amount = item.getTotalPrice() != null ? item.getTotalPrice() : BigDecimal.ZERO;
+                dailyQuantity.merge(date, qty, Integer::sum);
+                dailySales.merge(date, amount, BigDecimal::add);
+            }
+        }
+
+        List<SalesHistoryPointDTO> result = new ArrayList<>();
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            result.add(SalesHistoryPointDTO.builder()
+                    .date(date)
+                    .quantity(dailyQuantity.getOrDefault(date, 0))
+                    .sales(dailySales.getOrDefault(date, BigDecimal.ZERO))
+                    .build());
+        }
+        return result;
+    }
+
+    private boolean isStockPredictionEnabled(Long storeId) {
+        Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getStockPredictionEnabled();
+        return enabled == null || enabled;
+    }
+
     private int calculateMovingAverage(List<Integer> sales, int days) {
         if (sales == null || sales.isEmpty()) return 0;
         int sum = 0;
