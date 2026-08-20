@@ -75,6 +75,18 @@ public interface SaleItemRepository extends JpaRepository<SaleItem, Long> {
     @Query("SELECT SUM(si.quantity) FROM SaleItem si WHERE si.product.id = :productId")
     Long sumQuantityByProductId(@Param("productId") Long productId);
 
+    @Query("""
+        SELECT COALESCE(SUM(si.quantity), 0) FROM SaleItem si
+        JOIN si.transaction t
+        WHERE si.product.id = :productId
+        AND t.store.id = :storeId
+        AND t.transactionDate BETWEEN :startDate AND :endDate
+    """)
+    Integer sumQuantityByProductIdAndStoreIdAndDateRange(@Param("productId") Long productId,
+                                                           @Param("storeId") Long storeId,
+                                                           @Param("startDate") LocalDateTime startDate,
+                                                           @Param("endDate") LocalDateTime endDate);
+
     @Query("SELECT SUM(si.totalPrice) FROM SaleItem si WHERE si.product.id = :productId")
     BigDecimal sumTotalPriceByProductId(@Param("productId") Long productId);
 
