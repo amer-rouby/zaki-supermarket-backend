@@ -23,7 +23,6 @@ public interface PurchaseOrderService {
     Long countOrdersByStatus(Long storeId, String status);
     List<PurchaseOrderResponse> getOrdersByDateRange(Long storeId, LocalDate startDate, LocalDate endDate);
     java.math.BigDecimal getTotalPurchasesAmount(Long storeId, LocalDate startDate, LocalDate endDate);
-    PurchaseOrderResponse createFromPrediction(Long predictionId, Long storeId, Long userId);
     WhatsAppMessageResponse generateWhatsAppMessage(Long orderId, Long storeId);
     SendWhatsAppResponse sendWhatsAppMessage(Long orderId, Long storeId);
     SendEmailResponse sendPurchaseOrderEmail(Long orderId, Long storeId);

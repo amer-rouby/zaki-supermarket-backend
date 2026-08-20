@@ -3,7 +3,7 @@ package com.zakisupermarket.controller;
 import com.zakisupermarket.dto.request.UpdatePredictionDTO;
 import com.zakisupermarket.dto.response.ApiResponse;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
-import com.zakisupermarket.dto.response.PurchaseOrderSummaryDTO;
+import com.zakisupermarket.dto.response.ReorderRecommendationDTO;
 import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
 import com.zakisupermarket.exception.FeatureDisabledException;
@@ -255,39 +255,20 @@ public class DemandPredictionController {
         }
     }
 
-    @PostMapping("/{id}/create-purchase")
-    @PreAuthorize("hasAnyRole('ADMIN', 'PHARMACIST')")
-    public ResponseEntity<ApiResponse<PurchaseOrderSummaryDTO>> createPurchaseFromPrediction(
-            @PathVariable Long id,
-            @RequestBody(required = false) Map<String, Object> requestBody,
-            @AuthenticationPrincipal UserDetails userDetails) {
-
+    @GetMapping("/reorder-recommendations")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<ReorderRecommendationDTO>>> getReorderRecommendations() {
+        Long storeId = SecurityUtils.getCurrentStoreId();
         try {
-            Long storeId = SecurityUtils.extractStoreId(userDetails);
-            Long userId = SecurityUtils.extractUserId(userDetails);
-
-            if (storeId == null || userId == null) {
-                return ResponseEntity.status(401).body(ApiResponse.error("Invalid authentication"));
-            }
-
-            log.info("Creating purchase order from prediction: {}, store: {}, user: {}",
-                    id, storeId, userId);
-
-            PurchaseOrderSummaryDTO summary = predictionService.createPurchaseFromPrediction(id, storeId, userId);
-
-            if ("NO_ORDER_NEEDED".equals(summary.getStatus())) {
-                return ResponseEntity.ok(ApiResponse.success(summary, summary.getMessage()));
-            }
-
-            return ResponseEntity.ok(ApiResponse.success(summary, "Purchase order created from prediction"));
-
-        } catch (IllegalArgumentException e) {
-            log.warn("Invalid request for prediction {}: {}", id, e.getMessage());
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+            List<ReorderRecommendationDTO> recommendations = predictionService.getReorderRecommendations(storeId);
+            return ResponseEntity.ok(ApiResponse.success(recommendations));
+        } catch (FeatureDisabledException e) {
+            return ResponseEntity.status(403).body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
-            log.error("Error creating purchase order from prediction {}", id, e);
+            log.error("Error getting reorder recommendations", e);
             return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("Failed to create order: " + e.getMessage()));
+                    .body(ApiResponse.error("Failed to get reorder recommendations: " + e.getMessage()));
         }
     }
+
 }

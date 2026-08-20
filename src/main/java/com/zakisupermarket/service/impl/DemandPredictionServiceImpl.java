@@ -2,16 +2,19 @@ package com.zakisupermarket.service.impl;
 
 import com.zakisupermarket.dto.request.UpdatePredictionDTO;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
-import com.zakisupermarket.dto.response.PurchaseOrderSummaryDTO;
 import com.zakisupermarket.dto.request.CreateShareLinkRequest;
+import com.zakisupermarket.dto.response.ReorderRecommendationDTO;
 import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
 import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.entity.DemandPrediction;
+import com.zakisupermarket.entity.PurchaseOrderItem;
 import com.zakisupermarket.entity.Store;
 import com.zakisupermarket.entity.Product;
 import com.zakisupermarket.entity.SaleItem;
+import com.zakisupermarket.entity.Supplier;
 import com.zakisupermarket.repository.DemandPredictionRepository;
+import com.zakisupermarket.repository.PurchaseOrderItemRepository;
 import com.zakisupermarket.repository.StoreRepository;
 import com.zakisupermarket.repository.ProductRepository;
 import com.zakisupermarket.repository.SaleItemRepository;
@@ -45,12 +48,14 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     private final SaleItemRepository saleItemRepository;
     private final ShareLinkService shareLinkService;
     private final ZakiFeatureSettingsService zakiFeatureSettingsService;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
 
     private static final int MOVING_AVG_DAYS = 14;
     private static final int DEFAULT_PREDICTION = 10;
     private static final BigDecimal CONFIDENCE_BASE = BigDecimal.valueOf(0.75);
     private static final int FORECAST_HORIZON_DAYS = 7;
     private static final int RETENTION_DAYS = 60;
+    private static final int REORDER_TARGET_DAYS_OF_STOCK = 14;
 
     @Override
     @Transactional
@@ -343,42 +348,6 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     }
 
     @Override
-    @Transactional
-    public PurchaseOrderSummaryDTO createPurchaseFromPrediction(Long predictionId, Long storeId, Long userId) {
-        DemandPrediction prediction = predictionRepository.findById(predictionId)
-                .orElseThrow(() -> new RuntimeException("Prediction not found: " + predictionId));
-
-        if (!prediction.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Access denied: Prediction does not belong to this store");
-        }
-
-        Integer predictedQty = prediction.getPredictedQuantity() != null ? prediction.getPredictedQuantity() : 0;
-        Integer currentStock = getCurrentStock(prediction.getProduct() != null ? prediction.getProduct().getId() : null);
-        Integer recommendedOrder = Math.max(0, predictedQty - currentStock);
-
-        if (recommendedOrder <= 0) {
-            return PurchaseOrderSummaryDTO.builder()
-                    .purchaseOrderId(predictionId)
-                    .orderNumber(null)
-                    .productId(prediction.getProduct() != null ? prediction.getProduct().getId() : null)
-                    .productName(prediction.getProduct() != null ? prediction.getProduct().getName() : "N/A")
-                    .quantity(0)
-                    .status("NO_ORDER_NEEDED")
-                    .message("Current stock is sufficient - no new order needed")
-                    .build();
-        }
-
-        return PurchaseOrderSummaryDTO.builder()
-                .purchaseOrderId(predictionId)
-                .orderNumber("PO-" + System.currentTimeMillis())
-                .productId(prediction.getProduct() != null ? prediction.getProduct().getId() : null)
-                .productName(prediction.getProduct() != null ? prediction.getProduct().getName() : "N/A")
-                .quantity(recommendedOrder)
-                .status("DRAFT")
-                .message("Purchase order created from prediction")
-                .build();
-    }
-    @Override
     @Transactional(readOnly = true)
     public List<SalesHistoryPointDTO> getProductSalesHistory(Long productId, Long storeId, int days) {
         if (!isStockPredictionEnabled(storeId)) {
@@ -418,6 +387,89 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     private boolean isStockPredictionEnabled(Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getStockPredictionEnabled();
         return enabled == null || enabled;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReorderRecommendationDTO> getReorderRecommendations(Long storeId) {
+        Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getReorderRecommendationsEnabled();
+        if (enabled != null && !enabled) {
+            throw new FeatureDisabledException("Reorder recommendations feature is disabled for this store");
+        }
+
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+        List<DemandPrediction> predictions = predictionRepository.findUpcomingPredictions(storeId, tomorrow, tomorrow);
+
+        List<ReorderRecommendationDTO> result = new ArrayList<>();
+        for (DemandPrediction p : predictions) {
+            Long productId = p.getProduct() != null ? p.getProduct().getId() : null;
+            Integer currentStock = getCurrentStock(productId);
+            DemandPredictionResponse enriched = DemandPredictionResponse.fromEntity(p, currentStock, true);
+
+            // The base recommendedOrder field only compares stock against a single
+            // day's forecast, so a genuinely critical product can show 0 there.
+            // Reordering needs a real coverage target instead.
+            int dailyForecast = p.getPredictedQuantity() != null ? p.getPredictedQuantity() : 0;
+            int recommendedQuantity = Math.max(0, dailyForecast * REORDER_TARGET_DAYS_OF_STOCK - currentStock);
+            if (recommendedQuantity <= 0) continue;
+
+            Supplier supplier = findInferredSupplier(productId, storeId);
+
+            result.add(ReorderRecommendationDTO.builder()
+                    .predictionId(p.getId())
+                    .productId(productId)
+                    .productName(enriched.getProductName())
+                    .productCode(enriched.getProductCode())
+                    .currentStock(currentStock)
+                    .recommendedQuantity(recommendedQuantity)
+                    .supplierId(supplier != null ? supplier.getId() : null)
+                    .supplierName(supplier != null ? supplier.getName() : null)
+                    .reason(buildReorderReason(enriched))
+                    .priority(mapRiskToPriority(enriched.getRiskLevel()))
+                    .riskLevel(enriched.getRiskLevel())
+                    .daysUntilStockout(enriched.getDaysUntilStockout())
+                    .build());
+        }
+
+        result.sort(Comparator
+                .comparingInt((ReorderRecommendationDTO r) -> riskRank(r.getRiskLevel()))
+                .thenComparing(Comparator.comparingInt(ReorderRecommendationDTO::getRecommendedQuantity).reversed()));
+
+        return result;
+    }
+
+    private Supplier findInferredSupplier(Long productId, Long storeId) {
+        if (productId == null) return null;
+        List<PurchaseOrderItem> recent = purchaseOrderItemRepository
+                .findMostRecentByProductIdAndStoreId(productId, storeId, PageRequest.of(0, 1));
+        if (recent.isEmpty()) return null;
+        return recent.get(0).getPurchaseOrder().getSupplier();
+    }
+
+    private String buildReorderReason(DemandPredictionResponse r) {
+        if (r.getDaysUntilStockout() != null) {
+            return "Stock expected to run out in " + r.getDaysUntilStockout() + " day(s) based on recent sales";
+        }
+        return "Recommended based on demand forecast";
+    }
+
+    private String mapRiskToPriority(String riskLevel) {
+        if (riskLevel == null) return "LOW";
+        return switch (riskLevel) {
+            case "CRITICAL", "HIGH" -> "HIGH";
+            case "MEDIUM" -> "MEDIUM";
+            default -> "LOW";
+        };
+    }
+
+    private int riskRank(String riskLevel) {
+        if (riskLevel == null) return 4;
+        return switch (riskLevel) {
+            case "CRITICAL" -> 0;
+            case "HIGH" -> 1;
+            case "MEDIUM" -> 2;
+            default -> 3;
+        };
     }
 
     private int calculateMovingAverage(List<Integer> sales, int days) {
