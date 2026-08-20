@@ -133,25 +133,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     @Transactional
-    public PurchaseOrderResponse createFromPrediction(Long predictionId, Long storeId, Long userId) {
-        List<PurchaseOrder> existing = orderRepository.findByPredictionId(predictionId);
-        if (!existing.isEmpty()) {
-            throw new RuntimeException("Purchase order already exists for this prediction");
-        }
-
-        PurchaseOrderRequest request = PurchaseOrderRequest.builder()
-                .supplierId(null)
-                .orderDate(LocalDate.now())
-                .sourceType("PREDICTION")
-                .sourceId(predictionId)
-                .items(List.of())
-                .build();
-
-        return createOrder(request, storeId, userId);
-    }
-
-    @Override
-    @Transactional
     public PurchaseOrderResponse updateOrder(Long id, PurchaseOrderRequest request, Long storeId, Long userId) {
         PurchaseOrder order = orderRepository.findByIdAndStoreIdAndDeletedAtIsNull(id, storeId)
                 .orElseThrow(() -> new RuntimeException("Purchase order not found"));

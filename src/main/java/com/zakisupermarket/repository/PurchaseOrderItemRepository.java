@@ -1,6 +1,7 @@
 package com.zakisupermarket.repository;
 
 import com.zakisupermarket.entity.PurchaseOrderItem;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,4 +33,17 @@ public interface PurchaseOrderItemRepository extends JpaRepository<PurchaseOrder
     """)
     Long sumQuantityByProductIdAndStoreId(@Param("productId") Long productId,
                                              @Param("storeId") Long storeId);
+
+    @Query("""
+        SELECT poi FROM PurchaseOrderItem poi
+        JOIN poi.purchaseOrder po
+        WHERE poi.product.id = :productId
+        AND po.store.id = :storeId
+        AND po.supplier IS NOT NULL
+        AND po.deletedAt IS NULL
+        ORDER BY po.orderDate DESC, po.createdAt DESC
+    """)
+    List<PurchaseOrderItem> findMostRecentByProductIdAndStoreId(@Param("productId") Long productId,
+                                                                  @Param("storeId") Long storeId,
+                                                                  Pageable pageable);
 }

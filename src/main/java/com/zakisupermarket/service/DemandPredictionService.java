@@ -2,7 +2,7 @@ package com.zakisupermarket.service;
 
 import com.zakisupermarket.dto.request.UpdatePredictionDTO;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
-import com.zakisupermarket.dto.response.PurchaseOrderSummaryDTO;
+import com.zakisupermarket.dto.response.ReorderRecommendationDTO;
 import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
 import org.springframework.data.domain.Page;
@@ -42,7 +42,7 @@ public interface DemandPredictionService {
 
     ShareLinkResponse generateShareLink(Long predictionId, Long storeId, Long userId, int expiryHours);
 
-    PurchaseOrderSummaryDTO createPurchaseFromPrediction(Long predictionId, Long storeId, Long userId);
-
     List<SalesHistoryPointDTO> getProductSalesHistory(Long productId, Long storeId, int days);
+
+    List<ReorderRecommendationDTO> getReorderRecommendations(Long storeId);
 }

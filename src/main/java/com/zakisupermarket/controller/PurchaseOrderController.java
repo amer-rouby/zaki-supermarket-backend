@@ -82,19 +82,6 @@ public class PurchaseOrderController {
         return ResponseEntity.ok(ApiResponse.success(order, "Purchase order created successfully"));
     }
 
-    @PostMapping("/from-prediction/{predictionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'PHARMACIST')")
-    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> createFromPrediction(
-            @PathVariable Long predictionId,
-            @RequestParam Long storeId,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        storeId = SecurityUtils.getCurrentStoreId();
-        Long userId = SecurityUtils.extractUserId(userDetails);
-        log.info("POST /api/purchase-orders/from-prediction/{} - storeId: {}", predictionId, storeId);
-        PurchaseOrderResponse order = purchaseOrderService.createFromPrediction(predictionId, storeId, userId);
-        return ResponseEntity.ok(ApiResponse.success(order, "Purchase order created from prediction"));
-    }
-
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'PHARMACIST')")
     public ResponseEntity<ApiResponse<PurchaseOrderResponse>> updateOrder(
