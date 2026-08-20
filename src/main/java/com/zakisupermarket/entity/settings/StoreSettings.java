@@ -1,0 +1,90 @@
+package com.zakisupermarket.entity.settings;
+
+import com.zakisupermarket.entity.Store;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "store_settings", schema = "zaki_supermarket")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class StoreSettings {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "store_id", nullable = false, unique = true)
+    private Store store;
+
+    @Column(length = 255)
+    private String address;
+
+    @Column(length = 50)
+    private String phone;
+
+    @Column(length = 100)
+    private String email;
+
+    @Column(length = 50)
+    private String licenseNumber;
+
+    @Column(length = 50)
+    private String taxNumber;
+
+    @Column(length = 100)
+    private String commercialRegister;
+
+    @Column(length = 255)
+    private String logoUrl;
+
+    @Column(length = 20)
+    @Builder.Default
+    private String currency = "EGP";
+
+    @Column(length = 50)
+    @Builder.Default
+    private String timezone = "Africa/Cairo";
+
+    @Column(length = 20)
+    @Builder.Default
+    private String dateFormat = "dd/MM/yyyy";
+
+    @Column(length = 20)
+    @Builder.Default
+    private String timeFormat = "24h";
+
+    @Column(length = 255)
+    @Builder.Default
+    private String enabledPaymentMethods = "CASH,VISA,MASTERCARD,INSTAPAY,FAWRY,WALLET,BANK_TRANSFER";
+
+    // What counts as a "large" sale/expense for the notifyLargeSale/notifyLargeExpense
+    // per-user alert preferences - admin-configured per store since what's "large"
+    // varies a lot between a small and a busy store.
+    @Column(precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal largeSaleThreshold = BigDecimal.valueOf(5000);
+
+    @Column(precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal largeExpenseThreshold = BigDecimal.valueOf(2000);
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+}

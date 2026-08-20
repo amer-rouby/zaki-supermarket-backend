@@ -1,0 +1,151 @@
+package com.zakisupermarket.controller;
+
+import com.zakisupermarket.dto.request.NotificationRequest;
+import com.zakisupermarket.dto.response.ApiResponse;
+import com.zakisupermarket.dto.response.NotificationResponse;
+import com.zakisupermarket.security.JwtService;
+import com.zakisupermarket.service.NotificationService;
+import com.zakisupermarket.util.SecurityUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/notifications")
+@RequiredArgsConstructor
+@Slf4j
+@PreAuthorize("isAuthenticated()")
+public class NotificationController {
+
+    private final NotificationService notificationService;
+    private final JwtService jwtService;
+
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<NotificationResponse>>> getUserNotifications(
+            @RequestParam Long storeId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader) {
+
+        storeId = SecurityUtils.getCurrentStoreId();
+
+        Long userId = SecurityUtils.extractUserIdFromToken(authHeader, jwtService);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid token"));
+        }
+
+        Page<NotificationResponse> notifications = notificationService.getUserNotifications(storeId, userId, page, size);
+        return ResponseEntity.ok(ApiResponse.success(notifications));
+    }
+
+    @GetMapping("/unread-count")
+    public ResponseEntity<ApiResponse<Long>> getUnreadCount(
+            @RequestParam Long storeId,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader) {
+
+        storeId = SecurityUtils.getCurrentStoreId();
+
+        Long userId = SecurityUtils.extractUserIdFromToken(authHeader, jwtService);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid token"));
+        }
+
+        Long count = notificationService.getUnreadCount(storeId, userId);
+        return ResponseEntity.ok(ApiResponse.success(count));
+    }
+
+    @GetMapping("/unread")
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> getUnreadNotifications(
+            @RequestParam Long storeId,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader) {
+
+        storeId = SecurityUtils.getCurrentStoreId();
+
+        Long userId = SecurityUtils.extractUserIdFromToken(authHeader, jwtService);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid token"));
+        }
+
+        List<NotificationResponse> notifications = notificationService.getUnreadNotifications(storeId, userId);
+        return ResponseEntity.ok(ApiResponse.success(notifications));
+    }
+
+    @PutMapping("/{id}/read")
+    public ResponseEntity<ApiResponse<NotificationResponse>> markAsRead(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = SecurityUtils.extractUserIdFromToken(authHeader, jwtService);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid token"));
+        }
+
+        Long storeId = SecurityUtils.getCurrentStoreId();
+        NotificationResponse notification = notificationService.markAsRead(id, userId, storeId);
+        return ResponseEntity.ok(ApiResponse.success(notification, "Notification marked as read"));
+    }
+
+    @PostMapping("/read-all")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Integer>> markAllAsRead(
+            @RequestParam Long storeId,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader) {
+
+        storeId = SecurityUtils.getCurrentStoreId();
+
+        Long userId = SecurityUtils.extractUserIdFromToken(authHeader, jwtService);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid token"));
+        }
+
+        int count = notificationService.markAllAsRead(storeId, userId);
+        return ResponseEntity.ok(ApiResponse.success(count, "All notifications marked as read"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteNotification(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = SecurityUtils.extractUserIdFromToken(authHeader, jwtService);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(ApiResponse.error("Invalid token"));
+        }
+
+        Long storeId = SecurityUtils.getCurrentStoreId();
+        notificationService.deleteNotification(id, userId, storeId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Notification deleted"));
+    }
+
+    @PostMapping("/check-alerts")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public ResponseEntity<ApiResponse<Void>> checkAndCreateAlerts(@RequestParam Long storeId) {
+        storeId = SecurityUtils.getCurrentStoreId();
+        notificationService.checkAndCreateLowStockAlerts(storeId);
+        notificationService.checkAndCreateExpiryAlerts(storeId);
+        return ResponseEntity.ok(ApiResponse.success(null, "Alerts checked successfully"));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<NotificationResponse>> createNotification(
+            @RequestBody NotificationRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        NotificationResponse notification = notificationService.createNotification(request);
+        return ResponseEntity.ok(ApiResponse.success(notification, "Notification created"));
+    }
+}
