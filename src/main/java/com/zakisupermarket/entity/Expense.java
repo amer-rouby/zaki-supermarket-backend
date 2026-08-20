@@ -1,5 +1,6 @@
 package com.zakisupermarket.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.zakisupermarket.entity.enums.ExpenseCategory;
 import jakarta.persistence.*;
 import lombok.*;
@@ -24,6 +25,7 @@ public class Expense extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "store_id", nullable = false)
+    @JsonIgnoreProperties({"products", "users", "payments"})
     private Store store;
 
     @Enumerated(EnumType.STRING)
