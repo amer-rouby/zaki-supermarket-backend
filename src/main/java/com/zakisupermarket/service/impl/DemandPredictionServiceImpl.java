@@ -5,6 +5,7 @@ import com.zakisupermarket.dto.response.DemandPredictionResponse;
 import com.zakisupermarket.dto.request.CreateShareLinkRequest;
 import com.zakisupermarket.dto.response.ReorderRecommendationDTO;
 import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
+import com.zakisupermarket.dto.response.SupplierReorderGroupDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
 import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.entity.DemandPrediction;
@@ -396,7 +397,37 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
         if (enabled != null && !enabled) {
             throw new FeatureDisabledException("Reorder recommendations feature is disabled for this store");
         }
+        return computeReorderRecommendations(storeId);
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<SupplierReorderGroupDTO> getReorderRecommendationsBySupplier(Long storeId) {
+        Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getSupplierRecommendationsEnabled();
+        if (enabled != null && !enabled) {
+            throw new FeatureDisabledException("Supplier order recommendations feature is disabled for this store");
+        }
+
+        List<ReorderRecommendationDTO> recommendations = computeReorderRecommendations(storeId);
+        Map<Long, SupplierReorderGroupDTO> groups = new LinkedHashMap<>();
+
+        for (ReorderRecommendationDTO rec : recommendations) {
+            Long key = rec.getSupplierId() != null ? rec.getSupplierId() : -1L;
+            SupplierReorderGroupDTO group = groups.computeIfAbsent(key, k -> SupplierReorderGroupDTO.builder()
+                    .supplierId(rec.getSupplierId())
+                    .supplierName(rec.getSupplierName())
+                    .recommendations(new ArrayList<>())
+                    .build());
+            group.getRecommendations().add(rec);
+        }
+
+        List<SupplierReorderGroupDTO> result = new ArrayList<>(groups.values());
+        result.sort(Comparator.comparing((SupplierReorderGroupDTO g) -> g.getSupplierId() == null)
+                .thenComparing(g -> g.getSupplierName() != null ? g.getSupplierName() : ""));
+        return result;
+    }
+
+    private List<ReorderRecommendationDTO> computeReorderRecommendations(Long storeId) {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
         List<DemandPrediction> predictions = predictionRepository.findUpcomingPredictions(storeId, tomorrow, tomorrow);
 
