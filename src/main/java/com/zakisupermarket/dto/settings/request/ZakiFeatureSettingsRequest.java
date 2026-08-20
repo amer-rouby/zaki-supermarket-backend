@@ -1,5 +1,6 @@
 package com.zakisupermarket.dto.settings.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,6 +23,9 @@ public class ZakiFeatureSettingsRequest {
     private Boolean voiceSearchEnabled;
     private Boolean customerCreditEnabled;
     private Boolean aiAssistantEnabled;
+
+    @JsonProperty("eInvoiceEnabled")
     private Boolean eInvoiceEnabled;
+
     private Boolean offlineModeEnabled;
 }

@@ -80,16 +80,18 @@ public class ZakiFeatureSettingsServiceImpl implements ZakiFeatureSettingsServic
     @Transactional
     public ZakiFeatureSettings getOrCreate(Long storeId) {
         return settingsRepository.findByStoreId(storeId)
-                .orElseGet(() -> createDefaultSettings(storeId));
+                .orElseGet(() -> buildDefaultSettings(storeId));
     }
 
-    private ZakiFeatureSettings createDefaultSettings(Long storeId) {
+    // Deliberately not persisted here - getSettings() is read-only, and a plain
+    // GET shouldn't have a write side effect. The transient defaults get saved
+    // for real the first time updateSettings() actually runs.
+    private ZakiFeatureSettings buildDefaultSettings(Long storeId) {
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new RuntimeException("Store not found"));
 
-        ZakiFeatureSettings settings = ZakiFeatureSettings.builder()
+        return ZakiFeatureSettings.builder()
                 .store(store)
                 .build();
-        return settingsRepository.save(settings);
     }
 }
