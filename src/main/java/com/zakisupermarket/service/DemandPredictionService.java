@@ -4,6 +4,7 @@ import com.zakisupermarket.dto.request.UpdatePredictionDTO;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
 import com.zakisupermarket.dto.response.ReorderRecommendationDTO;
 import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
+import com.zakisupermarket.dto.response.SupplierReorderGroupDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
 import org.springframework.data.domain.Page;
 import java.time.LocalDate;
@@ -45,4 +46,6 @@ public interface DemandPredictionService {
     List<SalesHistoryPointDTO> getProductSalesHistory(Long productId, Long storeId, int days);
 
     List<ReorderRecommendationDTO> getReorderRecommendations(Long storeId);
+
+    List<SupplierReorderGroupDTO> getReorderRecommendationsBySupplier(Long storeId);
 }

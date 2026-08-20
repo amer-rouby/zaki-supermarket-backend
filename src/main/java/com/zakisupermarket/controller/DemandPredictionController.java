@@ -5,6 +5,7 @@ import com.zakisupermarket.dto.response.ApiResponse;
 import com.zakisupermarket.dto.response.DemandPredictionResponse;
 import com.zakisupermarket.dto.response.ReorderRecommendationDTO;
 import com.zakisupermarket.dto.response.SalesHistoryPointDTO;
+import com.zakisupermarket.dto.response.SupplierReorderGroupDTO;
 import com.zakisupermarket.dto.response.ShareLinkResponse;
 import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.service.DemandPredictionService;
@@ -268,6 +269,22 @@ public class DemandPredictionController {
             log.error("Error getting reorder recommendations", e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Failed to get reorder recommendations: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/reorder-recommendations/by-supplier")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<SupplierReorderGroupDTO>>> getReorderRecommendationsBySupplier() {
+        Long storeId = SecurityUtils.getCurrentStoreId();
+        try {
+            List<SupplierReorderGroupDTO> groups = predictionService.getReorderRecommendationsBySupplier(storeId);
+            return ResponseEntity.ok(ApiResponse.success(groups));
+        } catch (FeatureDisabledException e) {
+            return ResponseEntity.status(403).body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error getting supplier reorder recommendations", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Failed to get supplier reorder recommendations: " + e.getMessage()));
         }
     }
 
