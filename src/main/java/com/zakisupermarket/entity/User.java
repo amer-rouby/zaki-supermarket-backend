@@ -1,5 +1,6 @@
 package com.zakisupermarket.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
@@ -34,6 +35,7 @@ public class User implements UserDetails {
     private String username;
 
     @Column(nullable = false)
+    @JsonIgnore
     private String password;
 
     @Column(length = 255)
