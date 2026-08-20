@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -50,6 +52,7 @@ public class DemandPrediction {
     @Column(name = "algorithm_version", length = 50)
     private String algorithmVersion;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "factors_applied", columnDefinition = "jsonb")
     private String factorsApplied;
 
