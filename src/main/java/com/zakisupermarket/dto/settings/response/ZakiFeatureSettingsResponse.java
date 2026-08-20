@@ -1,5 +1,6 @@
 package com.zakisupermarket.dto.settings.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.zakisupermarket.entity.settings.ZakiFeatureSettings;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -27,7 +28,13 @@ public class ZakiFeatureSettingsResponse {
     private Boolean voiceSearchEnabled;
     private Boolean customerCreditEnabled;
     private Boolean aiAssistantEnabled;
+
+    // Jackson's bean-introspection naming mangles a getEInvoiceEnabled() getter
+    // (two capitals right after "get") into "einvoiceEnabled" instead of
+    // "eInvoiceEnabled" - pinned explicitly rather than relying on it.
+    @JsonProperty("eInvoiceEnabled")
     private Boolean eInvoiceEnabled;
+
     private Boolean offlineModeEnabled;
     private LocalDateTime updatedAt;
 
