@@ -1,13 +1,20 @@
 package com.zakisupermarket.service.impl;
 
 import com.zakisupermarket.dto.response.DashboardResponse;
+import com.zakisupermarket.dto.response.DemandPredictionResponse;
+import com.zakisupermarket.dto.response.ZakiInsightsDTO;
+import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.entity.Product;
 import com.zakisupermarket.entity.SaleTransaction;
 import com.zakisupermarket.entity.StockBatch;
+import com.zakisupermarket.entity.settings.ZakiFeatureSettings;
 import com.zakisupermarket.repository.ProductRepository;
 import com.zakisupermarket.repository.SaleTransactionRepository;
 import com.zakisupermarket.repository.StockBatchRepository;
 import com.zakisupermarket.service.DashboardService;
+import com.zakisupermarket.service.DemandPredictionService;
+import com.zakisupermarket.service.PricingRecommendationService;
+import com.zakisupermarket.service.settings.ZakiFeatureSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -20,6 +27,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +38,12 @@ public class DashboardServiceImpl implements DashboardService {
     private final SaleTransactionRepository saleTransactionRepository;
     private final ProductRepository productRepository;
     private final StockBatchRepository stockBatchRepository;
+    private final ZakiFeatureSettingsService zakiFeatureSettingsService;
+    private final DemandPredictionService demandPredictionService;
+    private final PricingRecommendationService pricingRecommendationService;
+
+    private static final int SALES_TREND_WINDOW_DAYS = 30;
+    private static final Set<String> HIGH_RISK_LEVELS = Set.of("CRITICAL", "HIGH");
 
     @Override
     @Transactional(readOnly = true)
@@ -76,6 +90,67 @@ public class DashboardServiceImpl implements DashboardService {
                 .topProducts(topProducts)
                 .recentSales(recentSales)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ZakiInsightsDTO getZakiInsights(Long storeId) {
+        ZakiFeatureSettings flags = zakiFeatureSettingsService.getOrCreate(storeId);
+        if (!isEnabled(flags.getDashboardInsightsEnabled())) {
+            throw new FeatureDisabledException("Dashboard insights feature is disabled for this store");
+        }
+
+        LocalDate today = LocalDate.now();
+        BigDecimal todayRevenue = saleTransactionRepository.sumTotalAmountByStoreIdAndDateRange(
+                storeId, today.atStartOfDay(), today.atTime(LocalTime.MAX));
+        if (todayRevenue == null) todayRevenue = BigDecimal.ZERO;
+
+        LocalDate trendStart = today.minusDays(SALES_TREND_WINDOW_DAYS);
+        LocalDate trendEnd = today.minusDays(1);
+        BigDecimal trendRevenue = saleTransactionRepository.sumTotalAmountByStoreIdAndDateRange(
+                storeId, trendStart.atStartOfDay(), trendEnd.atTime(LocalTime.MAX));
+        BigDecimal averageDailyRevenue = trendRevenue != null
+                ? trendRevenue.divide(BigDecimal.valueOf(SALES_TREND_WINDOW_DAYS), 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
+        Double salesDeltaPercent = null;
+        if (averageDailyRevenue.compareTo(BigDecimal.ZERO) > 0) {
+            salesDeltaPercent = todayRevenue.subtract(averageDailyRevenue)
+                    .divide(averageDailyRevenue, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))
+                    .doubleValue();
+        }
+
+        Integer highRiskStockoutCount = null;
+        if (isEnabled(flags.getStockPredictionEnabled())) {
+            List<DemandPredictionResponse> upcoming = demandPredictionService.getUpcomingPredictions(storeId, 1);
+            highRiskStockoutCount = (int) upcoming.stream()
+                    .filter(p -> HIGH_RISK_LEVELS.contains(p.getRiskLevel()))
+                    .count();
+        }
+
+        Integer reorderRecommendationsCount = null;
+        if (isEnabled(flags.getReorderRecommendationsEnabled())) {
+            reorderRecommendationsCount = demandPredictionService.getReorderRecommendations(storeId).size();
+        }
+
+        Integer pricingRecommendationsCount = null;
+        if (isEnabled(flags.getPricingRecommendationsEnabled())) {
+            pricingRecommendationsCount = pricingRecommendationService.getRecommendations(storeId).size();
+        }
+
+        return ZakiInsightsDTO.builder()
+                .todayRevenue(todayRevenue)
+                .averageDailyRevenue30d(averageDailyRevenue)
+                .salesDeltaPercent(salesDeltaPercent)
+                .highRiskStockoutCount(highRiskStockoutCount)
+                .reorderRecommendationsCount(reorderRecommendationsCount)
+                .pricingRecommendationsCount(pricingRecommendationsCount)
+                .build();
+    }
+
+    private boolean isEnabled(Boolean flag) {
+        return flag == null || flag;
     }
 
     private BigDecimal calculateInventoryValue(Long storeId) {
