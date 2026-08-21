@@ -14,7 +14,9 @@ import com.zakisupermarket.repository.ProductRepository;
 import com.zakisupermarket.repository.StockAdjustmentHistoryRepository;
 import com.zakisupermarket.repository.StockBatchRepository;
 import com.zakisupermarket.repository.UserRepository;
+import com.zakisupermarket.service.NotificationStreamService;
 import com.zakisupermarket.service.StockBatchService;
+import com.zakisupermarket.service.settings.ZakiFeatureSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
@@ -28,6 +30,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,6 +43,8 @@ public class StockBatchServiceImpl implements StockBatchService {
     private final StoreRepository storeRepository;
     private final UserRepository userRepository;
     private final StockAdjustmentHistoryRepository stockAdjustmentHistoryRepository;
+    private final NotificationStreamService notificationStreamService;
+    private final ZakiFeatureSettingsService zakiFeatureSettingsService;
 
     @Override
     @Transactional(readOnly = true)
@@ -131,7 +136,9 @@ public class StockBatchServiceImpl implements StockBatchService {
 
         StockBatch saved = stockBatchRepository.save(batch);
         log.info("Batch created successfully: id={}, batchNumber={}", saved.getId(), saved.getBatchNumber());
-        return mapToResponse(saved);
+        StockBatchResponse response = mapToResponse(saved);
+        notifyRealtimeStockChange(storeId, response, "CREATED");
+        return response;
     }
 
     @Override
@@ -175,7 +182,9 @@ public class StockBatchServiceImpl implements StockBatchService {
 
         StockBatch updated = stockBatchRepository.save(batch);
         log.info("Batch updated successfully: id={}, status={}", updated.getId(), updated.getStatus());
-        return mapToResponse(updated);
+        StockBatchResponse response = mapToResponse(updated);
+        notifyRealtimeStockChange(storeId, response, "UPDATED");
+        return response;
     }
 
     @Override
@@ -196,8 +205,9 @@ public class StockBatchServiceImpl implements StockBatchService {
 
         batch.setStatus(StockBatch.BatchStatus.DISCARDED);
         batch.setUpdatedAt(LocalDateTime.now());
-        stockBatchRepository.save(batch);
+        StockBatch discarded = stockBatchRepository.save(batch);
         log.info("Batch marked as discarded: id={}", id);
+        notifyRealtimeStockChange(storeId, mapToResponse(discarded), "DELETED");
     }
 
     @Override
@@ -281,7 +291,19 @@ public class StockBatchServiceImpl implements StockBatchService {
         log.info("Stock adjusted | batchId: {} | type: {} | qty: {} | {}→{} | status: {}",
                 batchId, type, adjustmentQuantity, currentQuantity, newQuantity, updated.getStatus());
 
-        return mapToResponse(updated);
+        StockBatchResponse response = mapToResponse(updated);
+        notifyRealtimeStockChange(storeId, response, "ADJUSTED");
+        return response;
+    }
+
+    private void notifyRealtimeStockChange(Long storeId, StockBatchResponse batch, String changeType) {
+        try {
+            Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getRealtimeUpdatesEnabled();
+            if (enabled != null && !enabled) return;
+            notificationStreamService.notifyStockChanged(storeId, Map.of("changeType", changeType, "batch", batch));
+        } catch (Exception e) {
+            log.warn("Failed to send real-time stock update for store {}: {}", storeId, e.getMessage());
+        }
     }
 
     @Override
