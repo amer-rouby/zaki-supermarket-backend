@@ -18,7 +18,8 @@ import java.util.List;
         @Index(name = "idx_sales_date", columnList = "transaction_date"),
         @Index(name = "idx_sales_invoice", columnList = "invoice_number"),
         @Index(name = "idx_sales_user", columnList = "user_id"),
-        @Index(name = "idx_sales_deleted", columnList = "deleted_at")
+        @Index(name = "idx_sales_deleted", columnList = "deleted_at"),
+        @Index(name = "idx_sales_client_reference", columnList = "client_reference_id")
 })
 @Where(clause = "deleted_at IS NULL")
 @Data
@@ -42,6 +43,13 @@ public class SaleTransaction {
 
     @Column(name = "invoice_number", unique = true, length = 100)
     private String invoiceNumber;
+
+    // Client-generated UUID sent only by the offline sales queue when it syncs
+    // a sale created while offline. Lets a retried sync (e.g. after a partial
+    // network failure mid-response) be recognized as the same sale instead of
+    // creating a duplicate - see OfflineSalesQueueService on the frontend.
+    @Column(name = "client_reference_id", unique = true, length = 100)
+    private String clientReferenceId;
 
     @Column(name = "subtotal", nullable = false, precision = 10, scale = 2)
     @Builder.Default

@@ -31,6 +31,11 @@ public class SaleRequest {
 
     private String paymentMethod = "CASH";
 
+    // Set only when this request is a sync of a sale queued while offline -
+    // lets the server recognize a retried sync as the same sale rather than
+    // creating a duplicate. Null for a normal online sale.
+    private String clientReferenceId;
+
     @DecimalMin(value = "0", message = "Discount cannot be negative")
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
