@@ -25,6 +25,10 @@ public class SaleRequest {
 
     private String customerPhone;
 
+    // Only required/used when paymentMethod is CREDIT - identifies which
+    // customer account to charge against their credit limit.
+    private Long customerId;
+
     private String paymentMethod = "CASH";
 
     @DecimalMin(value = "0", message = "Discount cannot be negative")

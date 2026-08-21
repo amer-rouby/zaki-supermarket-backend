@@ -7,5 +7,6 @@ public enum PaymentMethod {
     INSTAPAY,
     FAWRY,
     WALLET,
-    BANK_TRANSFER
+    BANK_TRANSFER,
+    CREDIT
 }
