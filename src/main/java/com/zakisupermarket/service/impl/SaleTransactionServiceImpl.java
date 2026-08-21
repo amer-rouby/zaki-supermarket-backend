@@ -88,6 +88,19 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
         User user = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + currentUserId));
 
+        String clientReferenceId = request.getClientReferenceId();
+        if (clientReferenceId != null && !clientReferenceId.isBlank()) {
+            Optional<SaleTransaction> existing = saleTransactionRepository.findByClientReferenceId(clientReferenceId);
+            if (existing.isPresent()) {
+                // Same offline-queued sale synced twice (e.g. the sync succeeded
+                // server-side but the response never reached the client) - return
+                // the sale that already exists instead of creating a duplicate.
+                log.info("Idempotent replay for clientReferenceId {} - sale {} already exists",
+                        clientReferenceId, existing.get().getId());
+                return mapToDTO(existing.get());
+            }
+        }
+
         String paymentMethodValue = Optional.ofNullable(request.getPaymentMethod()).orElse("CASH").toUpperCase();
         validatePaymentMethodEnabled(request.getStoreId(), paymentMethodValue);
 
@@ -106,6 +119,7 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
                 .store(store)
                 .user(user)
                 .invoiceNumber(generateInvoiceNumber())
+                .clientReferenceId(clientReferenceId != null && !clientReferenceId.isBlank() ? clientReferenceId : null)
                 .discountAmount(Optional.ofNullable(request.getDiscountAmount()).orElse(BigDecimal.ZERO))
                 .customerPhone(request.getCustomerPhone())
                 .paymentMethod(PaymentMethod.valueOf(paymentMethodValue))
