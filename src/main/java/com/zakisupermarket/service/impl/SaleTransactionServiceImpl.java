@@ -156,8 +156,18 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
 
     /** The POS UI already hides disabled payment-method buttons, but that's cosmetic
      * only - without this check, any payment method could still be submitted directly
-     * via the API regardless of what the store has disabled in settings. */
+     * via the API regardless of what the store has disabled in settings.
+     * CREDIT is not a payment gateway - it's settled against the customer's account,
+     * not any of the store's enabled gateway methods, and is gated separately by the
+     * customerCreditEnabled feature flag right after this call. Checking it against
+     * the gateway CSV here would (and did) reject every credit sale for any store
+     * that has ever configured enabledPaymentMethods without explicitly including
+     * "CREDIT" in it - which nothing prompts an admin to do, since CREDIT isn't a
+     * gateway option in that settings screen at all. */
     private void validatePaymentMethodEnabled(Long storeId, String paymentMethodValue) {
+        if ("CREDIT".equals(paymentMethodValue)) {
+            return;
+        }
         String enabled = storeSettingsRepository.findByStoreId(storeId)
                 .map(s -> s.getEnabledPaymentMethods())
                 .orElse(null);
