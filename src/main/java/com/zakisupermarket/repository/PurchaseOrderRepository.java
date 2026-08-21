@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,6 +50,17 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
         AND po.status = :status
     """)
     Long countByStoreIdAndStatus(@Param("storeId") Long storeId, @Param("status") String status);
+
+    @Query("""
+        SELECT po.createdBy.id AS userId, po.createdBy.fullName AS userName, COUNT(po) AS cnt
+        FROM PurchaseOrder po
+        WHERE po.store.id = :storeId
+        AND po.status = 'CANCELLED'
+        AND po.updatedAt > :since
+        AND po.createdBy IS NOT NULL
+        GROUP BY po.createdBy.id, po.createdBy.fullName
+    """)
+    List<Object[]> countCancelledOrdersByUserSince(@Param("storeId") Long storeId, @Param("since") LocalDateTime since);
 
     @Query("""
         SELECT po FROM PurchaseOrder po 
