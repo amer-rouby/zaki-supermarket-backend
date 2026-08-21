@@ -4,6 +4,8 @@ package com.zakisupermarket.controller;
 
 import com.zakisupermarket.dto.response.ApiResponse;
 import com.zakisupermarket.dto.response.DashboardResponse;
+import com.zakisupermarket.dto.response.ZakiInsightsDTO;
+import com.zakisupermarket.exception.FeatureDisabledException;
 import com.zakisupermarket.service.DashboardService;
 import com.zakisupermarket.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
@@ -35,5 +37,21 @@ public class DashboardController {
                 stats,
                 "Dashboard stats retrieved successfully"
         ));
+    }
+
+    @GetMapping("/zaki-insights")
+    @PreAuthorize("hasAnyRole('ADMIN', 'PHARMACIST', 'MANAGER')")
+    public ResponseEntity<ApiResponse<ZakiInsightsDTO>> getZakiInsights() {
+        Long storeId = SecurityUtils.getCurrentStoreId();
+        try {
+            ZakiInsightsDTO insights = dashboardService.getZakiInsights(storeId);
+            return ResponseEntity.ok(ApiResponse.success(insights, "Zaki insights retrieved successfully"));
+        } catch (FeatureDisabledException e) {
+            return ResponseEntity.status(403).body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error getting Zaki insights", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Failed to get Zaki insights: " + e.getMessage()));
+        }
     }
 }
