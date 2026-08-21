@@ -86,10 +86,6 @@ public class SaleTransaction {
     @Builder.Default
     private List<SaleItem> items = new ArrayList<>();
 
-//    public enum PaymentMethod {
-//        CASH, VISA, INSTAPAY, WALLET, CREDIT, BANK_TRANSFER, FAWRY
-//    }
-
     public void addItem(SaleItem item) {
         items.add(item);
         item.setTransaction(this);

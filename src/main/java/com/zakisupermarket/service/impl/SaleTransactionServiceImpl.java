@@ -8,8 +8,10 @@ import com.zakisupermarket.entity.*;
 import com.zakisupermarket.entity.enums.PaymentMethod;
 import com.zakisupermarket.repository.*;
 import com.zakisupermarket.repository.settings.StoreSettingsRepository;
+import com.zakisupermarket.service.CustomerService;
 import com.zakisupermarket.service.NotificationService;
 import com.zakisupermarket.service.SaleTransactionService;
+import com.zakisupermarket.service.settings.ZakiFeatureSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
@@ -41,6 +43,8 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final StoreSettingsRepository storeSettingsRepository;
+    private final CustomerService customerService;
+    private final ZakiFeatureSettingsService zakiFeatureSettingsService;
 
     @Override
     @Transactional(readOnly = true)
@@ -87,6 +91,17 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
         String paymentMethodValue = Optional.ofNullable(request.getPaymentMethod()).orElse("CASH").toUpperCase();
         validatePaymentMethodEnabled(request.getStoreId(), paymentMethodValue);
 
+        boolean isCreditSale = "CREDIT".equals(paymentMethodValue);
+        if (isCreditSale) {
+            Boolean creditEnabled = zakiFeatureSettingsService.getOrCreate(request.getStoreId()).getCustomerCreditEnabled();
+            if (creditEnabled != null && !creditEnabled) {
+                throw new RuntimeException("Customer credit management feature is disabled for this store");
+            }
+            if (request.getCustomerId() == null) {
+                throw new RuntimeException("A customer must be selected for a credit sale");
+            }
+        }
+
         SaleTransaction sale = SaleTransaction.builder()
                 .store(store)
                 .user(user)
@@ -109,6 +124,14 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
         SaleTransaction savedSale = saleTransactionRepository.save(sale);
         log.info("Sale created successfully | id: {} | total: {} | items: {}",
                 savedSale.getId(), savedSale.getTotalAmount(), savedSale.getItems().size());
+
+        if (isCreditSale) {
+            // Runs inside the same transaction as the sale save above, so a
+            // credit-limit rejection here rolls the whole sale back too -
+            // never leaves a persisted sale with no matching ledger entry.
+            customerService.recordCreditSale(request.getCustomerId(), request.getStoreId(),
+                    savedSale.getTotalAmount(), savedSale.getId(), currentUserId);
+        }
         try {
             notificationService.notifySaleCompleted(store.getId(), savedSale.getId(), savedSale.getTotalAmount());
         } catch (Exception e) {
