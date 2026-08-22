@@ -83,7 +83,7 @@ public class EInvoiceServiceImpl implements EInvoiceService {
     private void checkEnabled(Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getEInvoiceEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("E-invoice (ETA) feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_EINVOICE", "E-invoice (ETA) feature is disabled for this store");
         }
     }
 }

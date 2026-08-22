@@ -123,7 +123,7 @@ public class CustomerController {
     private void ensureEnabled(Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getCustomerCreditEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("Customer credit management feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_CUSTOMER_CREDIT", "Customer credit management feature is disabled for this store");
         }
     }
 }
