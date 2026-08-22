@@ -9,6 +9,8 @@ import com.zakisupermarket.entity.StockBatch;
 import com.zakisupermarket.entity.User;
 import com.zakisupermarket.entity.settings.BackupRecord;
 import com.zakisupermarket.entity.settings.NotificationSettings;
+import com.zakisupermarket.exception.LocalizedException;
+import com.zakisupermarket.exception.ResourceNotFoundException;
 import com.zakisupermarket.repository.*;
 import com.zakisupermarket.repository.settings.BackupRecordRepository;
 import com.zakisupermarket.repository.settings.NotificationSettingsRepository;
@@ -22,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -89,9 +92,9 @@ public class NotificationServiceImpl implements NotificationService {
     @Override @Transactional
     public NotificationResponse markAsRead(Long notificationId, Long userId, Long storeId) {
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new RuntimeException("Notification not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("NOTIFICATION_NOT_FOUND", "Notification not found"));
         if (!notification.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Notification not found");
+            throw new ResourceNotFoundException("NOTIFICATION_NOT_FOUND", "Notification not found");
         }
         if (notification.getRecipient() == null || notification.getRecipient().getId().equals(userId)) {
             notification.setRead(true);
@@ -100,7 +103,8 @@ public class NotificationServiceImpl implements NotificationService {
             notificationStreamService.notifyChanged(notification.getStore().getId());
             return response;
         }
-        throw new RuntimeException("Unauthorized to mark this notification as read");
+        throw new LocalizedException(HttpStatus.BAD_REQUEST, "NOTIFICATION_MARK_READ_UNAUTHORIZED",
+                "Unauthorized to mark this notification as read");
     }
 
     @Override @Transactional
@@ -270,15 +274,16 @@ public class NotificationServiceImpl implements NotificationService {
     @Override @Transactional
     public void deleteNotification(Long id, Long userId, Long storeId) {
         Notification notification = notificationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Notification not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("NOTIFICATION_NOT_FOUND", "Notification not found"));
         if (!notification.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Notification not found");
+            throw new ResourceNotFoundException("NOTIFICATION_NOT_FOUND", "Notification not found");
         }
         if (notification.getRecipient() == null || notification.getRecipient().getId().equals(userId)) {
             notificationRepository.delete(notification);
             notificationStreamService.notifyChanged(notification.getStore().getId());
         } else {
-            throw new RuntimeException("Unauthorized to delete this notification");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "NOTIFICATION_DELETE_UNAUTHORIZED",
+                    "Unauthorized to delete this notification");
         }
     }
 
@@ -303,7 +308,7 @@ public class NotificationServiceImpl implements NotificationService {
     private void createLowStockNotification(Product product, Long storeId, Long currentStock,
                                               Notification.NotificationType type, User recipient) {
         Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new RuntimeException("Store not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found"));
         long stock = currentStock == null ? 0 : currentStock;
         boolean outOfStock = type == Notification.NotificationType.OUT_OF_STOCK;
         createNotification(NotificationRequest.builder()
@@ -347,7 +352,7 @@ public class NotificationServiceImpl implements NotificationService {
     private void createExpiryNotification(StockBatch batch, Long storeId, String statusLabel,
                                           Notification.NotificationType type, Notification.NotificationPriority priority) {
         Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new RuntimeException("Store not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found"));
         boolean expired = type == Notification.NotificationType.EXPIRED;
         long days = ChronoUnit.DAYS.between(LocalDate.now(), batch.getExpiryDate());
 
@@ -371,7 +376,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override @Transactional
     public void notifySaleCompleted(Long storeId, Long saleId, BigDecimal totalAmount) {
         Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new RuntimeException("Store not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found"));
         var storeSettings = storeSettingsRepository.findByStoreId(storeId);
         BigDecimal threshold = storeSettings.map(s -> s.getLargeSaleThreshold()).orElse(BigDecimal.valueOf(5000));
         String currency = storeSettings.map(s -> s.getCurrency()).orElse("EGP");
@@ -391,7 +396,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override @Transactional
     public void notifyExpenseAdded(Long storeId, Long expenseId, BigDecimal amount) {
         Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new RuntimeException("Store not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found"));
         var storeSettings = storeSettingsRepository.findByStoreId(storeId);
         BigDecimal threshold = storeSettings.map(s -> s.getLargeExpenseThreshold()).orElse(BigDecimal.valueOf(2000));
         String currency = storeSettings.map(s -> s.getCurrency()).orElse("EGP");

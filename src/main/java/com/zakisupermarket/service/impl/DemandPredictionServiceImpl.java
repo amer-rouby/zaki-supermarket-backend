@@ -352,7 +352,7 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     @Transactional(readOnly = true)
     public List<SalesHistoryPointDTO> getProductSalesHistory(Long productId, Long storeId, int days) {
         if (!isStockPredictionEnabled(storeId)) {
-            throw new FeatureDisabledException("Stock prediction feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_STOCK_PREDICTION", "Stock prediction feature is disabled for this store");
         }
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(days - 1);
@@ -395,7 +395,7 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     public List<ReorderRecommendationDTO> getReorderRecommendations(Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getReorderRecommendationsEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("Reorder recommendations feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_REORDER_RECOMMENDATIONS", "Reorder recommendations feature is disabled for this store");
         }
         return computeReorderRecommendations(storeId);
     }
@@ -405,7 +405,7 @@ public class DemandPredictionServiceImpl implements DemandPredictionService {
     public List<SupplierReorderGroupDTO> getReorderRecommendationsBySupplier(Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getSupplierRecommendationsEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("Supplier order recommendations feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_SUPPLIER_RECOMMENDATIONS", "Supplier order recommendations feature is disabled for this store");
         }
 
         List<ReorderRecommendationDTO> recommendations = computeReorderRecommendations(storeId);

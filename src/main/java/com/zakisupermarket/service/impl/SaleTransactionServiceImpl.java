@@ -6,6 +6,8 @@ import com.zakisupermarket.dto.response.SaleTransactionDTO;
 import com.zakisupermarket.dto.response.SalesReportResponse;
 import com.zakisupermarket.entity.*;
 import com.zakisupermarket.entity.enums.PaymentMethod;
+import com.zakisupermarket.exception.LocalizedException;
+import com.zakisupermarket.exception.ResourceNotFoundException;
 import com.zakisupermarket.repository.*;
 import com.zakisupermarket.repository.settings.StoreSettingsRepository;
 import com.zakisupermarket.service.CustomerService;
@@ -19,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,7 +71,7 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
     public SaleTransactionDTO getSaleById(Long id, Long storeId) {
         log.debug("Fetching sale | id: {} | storeId: {}", id, storeId);
         SaleTransaction sale = saleTransactionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Sale not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("SALE_NOT_FOUND", "Sale not found with id: " + id));
         validateStoreAccess(sale, storeId);
         return mapToDTO(sale);
     }
@@ -80,13 +83,14 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
                 request.getStoreId(), request.getItems().size(), currentUserId);
 
         if (currentUserId == null) {
-            throw new RuntimeException("Cannot create sale: no authenticated user could be resolved");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "SALE_NO_AUTHENTICATED_USER",
+                    "Cannot create sale: no authenticated user could be resolved");
         }
 
         Store store = storeRepository.findById(request.getStoreId())
-                .orElseThrow(() -> new RuntimeException("Store not found: " + request.getStoreId()));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found: " + request.getStoreId()));
         User user = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new RuntimeException("User not found: " + currentUserId));
+                .orElseThrow(() -> new ResourceNotFoundException("USER_NOT_FOUND", "User not found: " + currentUserId));
 
         String clientReferenceId = request.getClientReferenceId();
         if (clientReferenceId != null && !clientReferenceId.isBlank()) {
@@ -108,10 +112,12 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
         if (isCreditSale) {
             Boolean creditEnabled = zakiFeatureSettingsService.getOrCreate(request.getStoreId()).getCustomerCreditEnabled();
             if (creditEnabled != null && !creditEnabled) {
-                throw new RuntimeException("Customer credit management feature is disabled for this store");
+                throw new LocalizedException(HttpStatus.BAD_REQUEST, "FEATURE_DISABLED_CUSTOMER_CREDIT",
+                        "Customer credit management feature is disabled for this store");
             }
             if (request.getCustomerId() == null) {
-                throw new RuntimeException("A customer must be selected for a credit sale");
+                throw new LocalizedException(HttpStatus.BAD_REQUEST, "CREDIT_SALE_CUSTOMER_REQUIRED",
+                        "A customer must be selected for a credit sale");
             }
         }
 
@@ -178,7 +184,9 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
                 .map(String::trim).map(String::toUpperCase).filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
         if (!enabledMethods.contains(paymentMethodValue)) {
-            throw new RuntimeException("Payment method '" + paymentMethodValue + "' is not enabled for this store");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "PAYMENT_METHOD_NOT_ENABLED",
+                    "Payment method '" + paymentMethodValue + "' is not enabled for this store",
+                    Map.of("paymentMethod", paymentMethodValue));
         }
     }
 
@@ -187,7 +195,7 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
     public SaleTransactionDTO updateSale(Long id, SaleRequest request, Long storeId) {
         log.info("Updating sale | id: {} | storeId: {}", id, storeId);
         SaleTransaction entity = saleTransactionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Sale not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("SALE_NOT_FOUND", "Sale not found: " + id));
         validateStoreAccess(entity, storeId);
 
         Optional.ofNullable(request.getDiscountAmount()).ifPresent(entity::setDiscountAmount);
@@ -207,7 +215,7 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
     public void deleteSale(Long id, Long storeId) {
         log.info("Soft deleting sale | id: {} | storeId: {}", id, storeId);
         SaleTransaction sale = saleTransactionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Sale not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("SALE_NOT_FOUND", "Sale not found: " + id));
         validateStoreAccess(sale, storeId);
         sale.markAsDeleted();
         saleTransactionRepository.save(sale);
@@ -407,11 +415,13 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
 
     private SaleItem processSaleItem(SaleItemRequest itemRequest, SaleTransaction sale) {
         Product product = productRepository.findById(itemRequest.getProductId())
-                .orElseThrow(() -> new RuntimeException("Product not found: " + itemRequest.getProductId()));
+                .orElseThrow(() -> new ResourceNotFoundException("PRODUCT_NOT_FOUND", "Product not found: " + itemRequest.getProductId()));
 
         StockBatch selectedBatch = selectStockBatch(product.getId(), itemRequest.getQuantity());
         if (selectedBatch == null) {
-            throw new RuntimeException("Insufficient stock for product: " + product.getName());
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK",
+                    "Insufficient stock for product: " + product.getName(),
+                    Map.of("productName", product.getName()));
         }
 
         SaleItem saleItem = SaleItem.builder()
@@ -458,7 +468,8 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
         }
         Integer newQuantity = batch.getQuantityCurrent() - quantity;
         if (newQuantity < 0) {
-            throw new RuntimeException("Stock deduction error: insufficient quantity");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "STOCK_DEDUCTION_ERROR",
+                    "Stock deduction error: insufficient quantity");
         }
         batch.setQuantityCurrent(newQuantity);
         stockBatchRepository.save(batch);
@@ -475,7 +486,8 @@ public class SaleTransactionServiceImpl implements SaleTransactionService {
         if (!sale.getStore().getId().equals(storeId)) {
             log.warn("Access denied | sale: {} | requested store: {} | actual store: {}",
                     sale.getId(), storeId, sale.getStore().getId());
-            throw new RuntimeException("Access denied: Sale does not belong to this store");
+            throw new LocalizedException(HttpStatus.FORBIDDEN, "SALE_STORE_ACCESS_DENIED",
+                    "Access denied: Sale does not belong to this store");
         }
     }
 

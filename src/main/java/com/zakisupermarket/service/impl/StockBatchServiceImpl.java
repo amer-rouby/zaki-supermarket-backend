@@ -9,6 +9,8 @@ import com.zakisupermarket.entity.Product;
 import com.zakisupermarket.entity.StockAdjustmentHistory;
 import com.zakisupermarket.entity.StockBatch;
 import com.zakisupermarket.entity.User;
+import com.zakisupermarket.exception.LocalizedException;
+import com.zakisupermarket.exception.ResourceNotFoundException;
 import com.zakisupermarket.repository.StoreRepository;
 import com.zakisupermarket.repository.ProductRepository;
 import com.zakisupermarket.repository.StockAdjustmentHistoryRepository;
@@ -23,6 +25,7 @@ import org.hibernate.Hibernate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,13 +63,14 @@ public class StockBatchServiceImpl implements StockBatchService {
     public StockBatchResponse getBatch(Long id, Long storeId) {
         log.debug("Fetching batch {} for store: {}", id, storeId);
         StockBatch batch = stockBatchRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Batch not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("BATCH_NOT_FOUND", "Batch not found with id: " + id));
 
         if (!Hibernate.isInitialized(batch.getStore())) {
             Hibernate.initialize(batch.getStore());
         }
         if (!batch.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Access denied: Batch does not belong to this store");
+            throw new LocalizedException(HttpStatus.FORBIDDEN, "BATCH_NOT_BELONGS_TO_STORE",
+                    "Access denied: Batch does not belong to this store");
         }
         return mapToResponse(batch);
     }
@@ -78,17 +82,17 @@ public class StockBatchServiceImpl implements StockBatchService {
                 storeId, userId, request.getProductId());
 
         if (userId == null) {
-            throw new RuntimeException("Unauthorized: User ID is required");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "USER_ID_REQUIRED", "Unauthorized: User ID is required");
         }
 
         Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new RuntimeException("Store not found with id: " + storeId));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found with id: " + storeId));
 
         Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new RuntimeException("Product not found with id: " + request.getProductId()));
+                .orElseThrow(() -> new ResourceNotFoundException("PRODUCT_NOT_FOUND", "Product not found with id: " + request.getProductId()));
 
         if (!product.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Product does not belong to this store");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "PRODUCT_NOT_BELONGS_TO_STORE", "Product does not belong to this store");
         }
 
         BigDecimal buyPrice = request.getBuyPrice();
@@ -151,10 +155,11 @@ public class StockBatchServiceImpl implements StockBatchService {
         }
 
         StockBatch batch = stockBatchRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Batch not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("BATCH_NOT_FOUND", "Batch not found with id: " + id));
 
         if (!batch.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Access denied: Batch does not belong to this store");
+            throw new LocalizedException(HttpStatus.FORBIDDEN, "BATCH_NOT_BELONGS_TO_STORE",
+                    "Access denied: Batch does not belong to this store");
         }
 
         batch.setBatchNumber(request.getBatchNumber());
@@ -193,14 +198,15 @@ public class StockBatchServiceImpl implements StockBatchService {
         log.info("Deleting batch {} for store: {}, user: {}", id, storeId, userId);
 
         if (userId == null) {
-            throw new RuntimeException("Unauthorized: User ID is required");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "USER_ID_REQUIRED", "Unauthorized: User ID is required");
         }
 
         StockBatch batch = stockBatchRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Batch not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("BATCH_NOT_FOUND", "Batch not found with id: " + id));
 
         if (!batch.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Access denied: Batch does not belong to this store");
+            throw new LocalizedException(HttpStatus.FORBIDDEN, "BATCH_NOT_BELONGS_TO_STORE",
+                    "Access denied: Batch does not belong to this store");
         }
 
         batch.setStatus(StockBatch.BatchStatus.DISCARDED);
@@ -239,14 +245,15 @@ public class StockBatchServiceImpl implements StockBatchService {
                 batchId, request.getType(), request.getQuantity(), userId);
 
         if (userId == null) {
-            throw new RuntimeException("Unauthorized: User ID is required for stock adjustment");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "USER_ID_REQUIRED_FOR_ADJUSTMENT",
+                    "Unauthorized: User ID is required for stock adjustment");
         }
 
         StockBatch batch = stockBatchRepository.findById(batchId)
-                .orElseThrow(() -> new RuntimeException("Batch not found with id: " + batchId));
+                .orElseThrow(() -> new ResourceNotFoundException("BATCH_NOT_FOUND", "Batch not found with id: " + batchId));
 
         if (!batch.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Batch not found with id: " + batchId);
+            throw new ResourceNotFoundException("BATCH_NOT_FOUND", "Batch not found with id: " + batchId);
         }
 
         Integer currentQuantity = batch.getQuantityCurrent();
@@ -257,12 +264,15 @@ public class StockBatchServiceImpl implements StockBatchService {
             case "ADD" -> currentQuantity + adjustmentQuantity;
             case "REMOVE" -> {
                 if (adjustmentQuantity > currentQuantity) {
-                    throw new RuntimeException("Insufficient stock: current=" + currentQuantity + ", requested=" + adjustmentQuantity);
+                    throw new LocalizedException(HttpStatus.BAD_REQUEST, "INSUFFICIENT_STOCK",
+                            "Insufficient stock: current=" + currentQuantity + ", requested=" + adjustmentQuantity,
+                            Map.of("current", currentQuantity, "requested", adjustmentQuantity));
                 }
                 yield currentQuantity - adjustmentQuantity;
             }
             case "CORRECTION" -> adjustmentQuantity;
-            default -> throw new IllegalArgumentException("Invalid adjustment type: " + type);
+            default -> throw new LocalizedException(HttpStatus.BAD_REQUEST, "INVALID_ADJUSTMENT_TYPE",
+                    "Invalid adjustment type: " + type, Map.of("type", type));
         };
 
         batch.setQuantityCurrent(newQuantity);
@@ -310,10 +320,10 @@ public class StockBatchServiceImpl implements StockBatchService {
     @Transactional(readOnly = true)
     public List<StockAdjustmentHistoryDTO> getAdjustmentHistory(Long batchId, Long storeId) {
         StockBatch batch = stockBatchRepository.findById(batchId)
-                .orElseThrow(() -> new RuntimeException("Batch not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("BATCH_NOT_FOUND", "Batch not found"));
 
         if (!batch.getStore().getId().equals(storeId)) {
-            throw new RuntimeException("Access denied");
+            throw new LocalizedException(HttpStatus.FORBIDDEN, "BATCH_NOT_BELONGS_TO_STORE", "Access denied");
         }
 
         return stockAdjustmentHistoryRepository.findByBatchIdOrderByAdjustmentDateDesc(batchId)

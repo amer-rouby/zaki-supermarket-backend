@@ -6,6 +6,7 @@ import com.zakisupermarket.entity.Payment;
 import com.zakisupermarket.entity.enums.PaymentMethod;
 import com.zakisupermarket.entity.enums.PaymentStatus;
 import com.zakisupermarket.entity.Store;
+import com.zakisupermarket.exception.ResourceNotFoundException;
 import com.zakisupermarket.repository.PaymentRepository;
 import com.zakisupermarket.repository.StoreRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -27,7 +29,7 @@ public abstract class BasePaymentGateway implements PaymentGateway {
         log.info("Processing payment via {}", getPaymentMethod());
         try {
             Store store = storeRepository.findById(request.getStoreId())
-                    .orElseThrow(() -> new RuntimeException("Store not found: " + request.getStoreId()));
+                    .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found: " + request.getStoreId()));
 
             String referenceNumber = generateReferenceNumber();
 

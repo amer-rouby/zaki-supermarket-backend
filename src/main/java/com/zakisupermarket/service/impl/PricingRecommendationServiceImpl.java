@@ -46,7 +46,7 @@ public class PricingRecommendationServiceImpl implements PricingRecommendationSe
     public List<PricingRecommendationDTO> getRecommendations(Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getPricingRecommendationsEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("Pricing recommendations feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_PRICING_RECOMMENDATIONS", "Pricing recommendations feature is disabled for this store");
         }
 
         List<PricingRecommendationDTO> result = new ArrayList<>();

@@ -6,6 +6,8 @@ import com.zakisupermarket.dto.response.AuthResponse;
 import com.zakisupermarket.entity.Store;
 import com.zakisupermarket.entity.User;
 import com.zakisupermarket.exception.AccountLockedException;
+import com.zakisupermarket.exception.LocalizedException;
+import com.zakisupermarket.exception.ResourceNotFoundException;
 import com.zakisupermarket.repository.StoreRepository;
 import com.zakisupermarket.repository.UserRepository;
 import com.zakisupermarket.security.JwtService;
@@ -14,6 +16,7 @@ import com.zakisupermarket.service.AuthenticationService;
 import com.zakisupermarket.service.SessionService;
 import com.zakisupermarket.service.settings.SecuritySettingsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -141,7 +144,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             if (remainingLockMinutes != null) {
                 throw new AccountLockedException(
                         "Account is locked due to too many failed login attempts. Try again in "
-                                + remainingLockMinutes + " minute(s).");
+                                + remainingLockMinutes + " minute(s).",
+                        java.util.Map.of("minutes", remainingLockMinutes));
             }
         }
 
@@ -194,7 +198,8 @@ public class AuthenticationServiceImpl implements AuthenticationService {
             twoFactorPendingLoginStore.invalidate(tempToken);
             throw new AccountLockedException(
                     "Account is locked due to too many failed attempts. Try again in "
-                            + remainingLockMinutes + " minute(s).");
+                            + remainingLockMinutes + " minute(s).",
+                    java.util.Map.of("minutes", remainingLockMinutes));
         }
 
         if (!securitySettingsService.verifyTwoFactorCode(userId, code)) {

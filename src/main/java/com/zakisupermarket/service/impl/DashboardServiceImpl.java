@@ -97,7 +97,7 @@ public class DashboardServiceImpl implements DashboardService {
     public ZakiInsightsDTO getZakiInsights(Long storeId) {
         ZakiFeatureSettings flags = zakiFeatureSettingsService.getOrCreate(storeId);
         if (!isEnabled(flags.getDashboardInsightsEnabled())) {
-            throw new FeatureDisabledException("Dashboard insights feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_DASHBOARD_INSIGHTS", "Dashboard insights feature is disabled for this store");
         }
 
         LocalDate today = LocalDate.now();

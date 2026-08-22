@@ -21,7 +21,7 @@ public class AssistantServiceImpl implements AssistantService {
     public AssistantAnswer ask(String query, Long storeId) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getAiAssistantEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("Zaki assistant feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_AI_ASSISTANT", "Zaki assistant feature is disabled for this store");
         }
         if (query == null || query.trim().isEmpty()) {
             throw new RuntimeException("Question cannot be empty");

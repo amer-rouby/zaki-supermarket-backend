@@ -1,14 +1,14 @@
 package com.zakisupermarket.exception;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
-@ResponseStatus(HttpStatus.FORBIDDEN)
-public class FeatureDisabledException extends RuntimeException {
+import java.util.Map;
+
+public class FeatureDisabledException extends LocalizedException {
 
     private static final long serialVersionUID = 1L;
 
-    public FeatureDisabledException(String message) {
-        super(message);
+    public FeatureDisabledException(String errorCode, String message) {
+        super(HttpStatus.FORBIDDEN, errorCode, message, Map.of());
     }
 }

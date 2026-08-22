@@ -9,6 +9,8 @@ import com.zakisupermarket.entity.Customer;
 import com.zakisupermarket.entity.CustomerTransaction;
 import com.zakisupermarket.entity.Store;
 import com.zakisupermarket.entity.User;
+import com.zakisupermarket.exception.LocalizedException;
+import com.zakisupermarket.exception.ResourceNotFoundException;
 import com.zakisupermarket.repository.CustomerRepository;
 import com.zakisupermarket.repository.CustomerTransactionRepository;
 import com.zakisupermarket.repository.StoreRepository;
@@ -19,11 +21,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -62,11 +66,12 @@ public class CustomerServiceImpl implements CustomerService {
     @Transactional
     public CustomerResponse createCustomer(CustomerRequest request, Long storeId) {
         Store store = storeRepository.findById(storeId)
-                .orElseThrow(() -> new RuntimeException("Store not found: " + storeId));
+                .orElseThrow(() -> new ResourceNotFoundException("STORE_NOT_FOUND", "Store not found: " + storeId));
 
         if (request.getPhone() != null && !request.getPhone().isBlank()
                 && customerRepository.existsByStoreIdAndPhoneAndDeletedAtIsNull(storeId, request.getPhone())) {
-            throw new RuntimeException("A customer with this phone number already exists");
+            throw new LocalizedException(HttpStatus.CONFLICT, "CUSTOMER_PHONE_EXISTS",
+                    "A customer with this phone number already exists");
         }
 
         Customer customer = Customer.builder()
@@ -111,7 +116,8 @@ public class CustomerServiceImpl implements CustomerService {
     public void deleteCustomer(Long id, Long storeId) {
         Customer customer = findCustomerOrThrow(id, storeId);
         if (customer.getCurrentBalance() != null && customer.getCurrentBalance().compareTo(BigDecimal.ZERO) > 0) {
-            throw new RuntimeException("Cannot delete a customer with an outstanding balance");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "CUSTOMER_HAS_BALANCE",
+                    "Cannot delete a customer with an outstanding balance");
         }
         customer.setDeletedAt(java.time.LocalDateTime.now());
         customerRepository.save(customer);
@@ -148,7 +154,8 @@ public class CustomerServiceImpl implements CustomerService {
         BigDecimal currentBalance = customer.getCurrentBalance() != null ? customer.getCurrentBalance() : BigDecimal.ZERO;
 
         if (request.getAmount().compareTo(currentBalance) > 0) {
-            throw new RuntimeException("Payment amount exceeds the customer's outstanding balance");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "PAYMENT_EXCEEDS_BALANCE",
+                    "Payment amount exceeds the customer's outstanding balance");
         }
 
         BigDecimal newBalance = currentBalance.subtract(request.getAmount());
@@ -175,7 +182,8 @@ public class CustomerServiceImpl implements CustomerService {
     public Customer recordCreditSale(Long customerId, Long storeId, BigDecimal amount, Long saleId, Long userId) {
         Customer customer = findCustomerOrThrow(customerId, storeId);
         if (!customer.isActive()) {
-            throw new RuntimeException("Customer account is not active");
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "CUSTOMER_NOT_ACTIVE",
+                    "Customer account is not active");
         }
 
         BigDecimal currentBalance = customer.getCurrentBalance() != null ? customer.getCurrentBalance() : BigDecimal.ZERO;
@@ -183,8 +191,11 @@ public class CustomerServiceImpl implements CustomerService {
         BigDecimal newBalance = currentBalance.add(amount);
 
         if (newBalance.compareTo(creditLimit) > 0) {
-            throw new RuntimeException("Credit limit exceeded for customer " + customer.getName()
-                    + ": current balance " + currentBalance + " + " + amount + " would exceed limit " + creditLimit);
+            throw new LocalizedException(HttpStatus.BAD_REQUEST, "CREDIT_LIMIT_EXCEEDED",
+                    "Credit limit exceeded for customer " + customer.getName()
+                            + ": current balance " + currentBalance + " + " + amount + " would exceed limit " + creditLimit,
+                    Map.of("customerName", customer.getName(), "currentBalance", currentBalance,
+                            "amount", amount, "limit", creditLimit));
         }
 
         customer.setCurrentBalance(newBalance);
@@ -208,6 +219,6 @@ public class CustomerServiceImpl implements CustomerService {
 
     private Customer findCustomerOrThrow(Long id, Long storeId) {
         return customerRepository.findByIdAndStoreIdAndDeletedAtIsNull(id, storeId)
-                .orElseThrow(() -> new RuntimeException("Customer not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("CUSTOMER_NOT_FOUND", "Customer not found: " + id));
     }
 }

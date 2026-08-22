@@ -255,7 +255,7 @@ public class AnomalyDetectionServiceImpl implements AnomalyDetectionService {
                                                           AnomalyDetection.Type type, int page, int size) {
         Boolean enabled = zakiFeatureSettingsService.getOrCreate(storeId).getAnomalyDetectionEnabled();
         if (enabled != null && !enabled) {
-            throw new FeatureDisabledException("Anomaly detection feature is disabled for this store");
+            throw new FeatureDisabledException("FEATURE_DISABLED_ANOMALY_DETECTION", "Anomaly detection feature is disabled for this store");
         }
         PageRequest pageable = PageRequest.of(page, size);
         Page<AnomalyDetection> result;
