@@ -12,21 +12,33 @@
 
 ## 📖 Project Overview
 
-**Zaki Supermarket** is a retail management system forked from [SmartPharma](https://github.com/amer-rouby/smartpharma-backend), reusing its proven multi-tenant retail engine (auth, inventory, POS, purchasing, payments, reporting, notifications) as a starting point for a **supermarket** business instead of a pharmacy.
+**Zaki Supermarket** is a retail management system originally forked from [SmartPharma](https://github.com/amer-rouby/smartpharma-backend), reusing its multi-tenant retail engine (auth, inventory, POS, purchasing, payments, reporting, notifications) as the base for a **supermarket** business instead of a pharmacy. The Java package (`com.zakisupermarket.*`) and database (`zaki_supermarket`) have their own identity, and a dedicated set of "Zaki AI" features (below) has since been built on top of that base specifically for supermarket operations.
 
-## ⚠️ Fork status — read before assuming anything works as a supermarket
+**Runs independently of SmartPharma** — different Maven artifact, different port (`8082` vs `8081`), different database — so both can run side by side on the same machine.
 
-This repository is a **direct file copy** of the SmartPharma backend, with only project identity changed so far (Maven coordinates, app name, port, database). It is **not yet adapted to supermarket business rules**:
+## 🤖 Zaki AI Features
 
-- The Java package is still `com.smartpharma.*` — not yet renamed.
-- Domain logic is still pharmacy-shaped: prescription-required products, controlled-substance flags, drug-specific demand-prediction seasonality (antibiotics/painkillers/allergy-season factors), pharmacy-specific category seed data, etc.
-- None of this has been reviewed or rewritten for a supermarket's actual domain (perishables without prescriptions, FMCG categories, different seasonality, etc.).
+Every feature below is real, rule-based/statistical logic over the store's own data — **no paid AI/ML API is used anywhere**, and no feature auto-creates orders, auto-changes prices, or auto-accuses a user. Each one is toggled per store from **Settings → Zaki Features** (`zaki_feature_settings` table) and every endpoint re-checks its own flag server-side (fails closed with `403` if disabled), not just in the UI.
 
-**Runs independently of SmartPharma** — different Maven artifact, different port (`8082` vs `8081`), different database (`zaki_supermarket` vs `smartpharma`) — so both can run side by side on the same machine without conflict while the supermarket-specific rework happens.
+| # | Feature | What it does |
+|---|---|---|
+| 1 | Smart Inventory Prediction | Stockout date + risk level (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`) on top of the existing demand-forecast engine |
+| 2 | Smart Reorder Recommendations | Recommended reorder quantity per product, sorted by risk — review only, never auto-orders |
+| 3 | Smart Pricing / Expiry Recommendations | Suggested discount % for near-expiry or slow-moving stock — suggestion only, never changes `Product.sellPrice` |
+| 4 | Supplier Order Recommendations | Reorder recommendations grouped by supplier |
+| 5 | Zaki Owner Dashboard Insights | Aggregated sales/risk/expiry/anomaly counters on the owner dashboard |
+| 6 | Zaki Daily Brief | One-screen daily summary composed from the same real data as the insights above |
+| 7 | Unusual Activity Detection | Flags excessive refunds, unusual discounts, frequent cancellations, repeated stock adjustments — always "unusual activity", never "fraud"; never auto-blocks anyone |
+| 8 | Real-Time Inventory Updates | Stock screens patch live via the existing SSE stream instead of requiring a manual refresh |
+| 9 | Voice Product Search | Browser-native speech recognition feeds the existing product search — no key, no server component |
+| 10 | Customer Credit / Debt Management | `Customer` + append-only ledger, credit-limit enforcement on credit sales |
+| 11 | Zaki Assistant | Pattern-matched Q&A over real backend data (top sellers, stockout risk, near-expiry, sales vs average, reorder recommendations) — never fabricates an answer |
+| 12 | Egyptian E-Invoice (ETA) integration | Structural layer only until real credentials are supplied — see [`docs/eta-integration.md`](docs/eta-integration.md) |
+| 13 | Offline-First POS | Service worker + IndexedDB sale queue; syncs on reconnect; conflicts surface for manual review, never silently overwritten |
 
 ## 🛠 Tech Stack
 
-Same as SmartPharma — Spring Boot 3.2.0, Java 17, PostgreSQL/Hibernate, Spring Security + JWT, Maven. See the [SmartPharma backend README](https://github.com/amer-rouby/smartpharma-backend) for full architecture and module details until this one gets its own pass.
+Spring Boot 3.2.0, Java 17, PostgreSQL/Hibernate (`ddl-auto=update`, Flyway disabled), Spring Security + JWT, Maven.
 
 ## 🚀 Running locally
 
@@ -34,7 +46,7 @@ Same as SmartPharma — Spring Boot 3.2.0, Java 17, PostgreSQL/Hibernate, Spring
 # create the database once
 psql -U root -c "CREATE DATABASE zaki_supermarket;"
 
-# required env vars
+# required
 export DB_URL=jdbc:postgresql://localhost:5432/zaki_supermarket
 export DB_USERNAME=root
 export DB_PASSWORD=root
@@ -43,6 +55,24 @@ export JWT_SECRET=$(openssl rand -base64 64)
 mvn spring-boot:run
 ```
 API starts on `http://localhost:8082/api`.
+
+### Optional environment variables
+
+None of these have a real default in production — each fails closed (feature disabled / send rejected) with a clear error rather than silently no-op'ing or faking success:
+
+| Variable | Purpose |
+|---|---|
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed frontend origins (has a dev-friendly default) |
+| `PLATFORM_ADMIN_API_KEY` | `X-Platform-Admin-Key` for whole-database backup/restore endpoints |
+| `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN` | WhatsApp Cloud API, for supplier/customer notifications |
+| `ETA_CLIENT_ID`, `ETA_CLIENT_SECRET`, `ETA_ENVIRONMENT` | Egyptian e-invoice (ETA) — see [`docs/eta-integration.md`](docs/eta-integration.md) |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | Outgoing SMTP for supplier-facing emails |
+
+A `dev` Spring profile (`-Dspring-boot.run.profiles=dev`) exists with fallback defaults for local development — always override `DB_URL`/`JWT_SECRET` with your own real values rather than relying on it for anything containing real data.
+
+## ⚠️ Known carry-over from the SmartPharma fork
+
+Some naming still reflects the pharmacy origin and hasn't been renamed, since it doesn't affect supermarket behavior: the `PHARMACIST` role is the de facto cashier/staff role, and a handful of internal identifiers/log messages still say "SmartPharma" or "pharmacy" in places that were never business-critical to rename.
 
 ## 🔗 Related Repositories
 
