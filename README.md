@@ -77,7 +77,7 @@ Some naming still reflects the pharmacy origin and hasn't been renamed, since it
 ## 🔗 Related Repositories
 
 - **Frontend**: [zaki-supermarket-frontend](https://github.com/amer-rouby/zaki-supermarket-frontend)
-- **Mobile**: [zaki-supermarket-mobile](https://github.com/amer-rouby/zaki-supermarket-mobile)
+- **Mobile**: not published yet
 - **Forked from**: [smartpharma-backend](https://github.com/amer-rouby/smartpharma-backend)
 
 ## 📄 License
